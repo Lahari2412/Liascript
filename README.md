@@ -525,7 +525,7 @@ As mentioned earlier, this is only a brief introduction into this topic. So chec
 
 Editing tables might seem tedious, but actually it is not. There is a huge number of plugins for different editors that you can use, which do the formatting for you. You can use them to quickly navigate through your cells, and some even allow sorting.
 
-![alt text](editing.gif)
+![alt text](img/editing.gif)
 
 **Editors: Plugins**
 
@@ -678,7 +678,7 @@ for i in range(10):
     print(i)
 ```
 
-``` python
+``` 
 import time
 # Quick, count to ten!
 for i in range(10):
@@ -688,12 +688,6 @@ for i in range(10):
 ```
 
 
-import time
-# Quick, count to ten!
-for i in range(10):
-# (but not *too* quick)
-    time.sleep(0.5)
-    print(i)
 
 
 In case you are wondering, how to embed a code-block into a code-block with backticks? Three backticks are the minimum, thus you can surround your Markdown code-block example with a sequence of 4 or more backticks. If you start with four backticks, LiaScript will parse everything as code until it reaches a matching number of backticks.
