@@ -1082,7 +1082,7 @@ If you share your course via the website, then all the courses and the current c
 * Source: [liascript/src/typescript/connectors/Browser](https://github.com/LiaScript/LiaScript/tree/development/src/typescript/connectors/Browser)
 
 
-2. SCORM 1.2
+**2. SCORM 1.2**
 
 [SCORM](https://en.wikipedia.org/wiki/Sharable_Content_Object_Reference_Model) stands for Sharable Content Object Reference Model and allows you to store the course state directly within every LMS that has support for SCORM 1.2. For this case you have to use our [exporter](https://github.com/LiaScript/LiaScript-Exporter), which translates your course into a "SCORM-compliant" zip-file. You can check if your LMS has support for SCORM, by visiting our LMS-overview.
 
@@ -1090,7 +1090,7 @@ If you share your course via the website, then all the courses and the current c
 * Source: [liascript/src/typescript/connectors/SCORM1.2](https://github.com/LiaScript/LiaScript/tree/development/src/typescript/connectors/SCORM1.2)
 * Does your LMS support SCORM 1.2: [LMS-Overview](https://github.com/LiaScript/LiaScript-Exporter#lms-support-list)
 
-3. Base
+**3. Base**
 
 You can also use our [exporter-tool](https://github.com/LiaScript/LiaScript-Exporter) to create single websites of your course. But, this "base" does only support to store user-settings, such as style, mode, etc. This "base-connector" is also used for the live-server and editors. If you are a developer and want to extend the LiaScript support to store state within your backend, then this is the right place to look at. This module provides an abstract class, to which all statefull data is sent. You can simply inherit from this class and implement the access to your system.
 
@@ -3184,3 +3184,432 @@ Currently not supported input types:
 
 * `file`
 * `image`
+
+
+## **Connecting Scripts with `output`**
+------------------------------------
+
+You can use the `output="channel-name"` parameter to define a dedicated channel on which the script publishes its changed outputs. Other scripts can subscribe to these changes via `input(channel-name)`, but the channel name has to be enclosed in Markdown-style backticks, as depicted below.
+
+```markdown
+<script input="checkbox" value="true" output="P" default="true">
+@input
+</script>
+AND
+<script input="checkbox" value="false" output="Q" default="false">
+@input
+</script>
+-->
+<script>
+@input(`P`) && @input(`Q`)
+</script>
+```
+
+When a script is executed, `@input` gets replaced by the current value of the script, while input markers with topics are replaced by the actual displayed output from other scripts. Every change in the result of one script causes an update of the script that uses the foreign output.
+
+<script input="checkbox" value="true" output="P" default="true">
+@input
+</script>
+AND
+<script input="checkbox" value="false" output="Q" default="false">
+@input
+</script>
+-->
+<script>
+@input(`P`) && @input(`Q`)
+</script>
+
+Note that formatting is only performed on the displayed representation and does not affect the actual input and output values.
+
+
+#### **`default` & Execution-Graphs**
+----------------------------------------
+
+If you connect scripts, ideally the connections should form a directed graph without cycles. However, if desired, you can create cycles that continue until the results no longer change.
+
+```markdown
+
+<script input="range" value="1" default="1" output="x">
+setTimeout(function(){
+  send.lia( @input * @input(`y`) )
+}, 1000)
+
+send.wait()
+</script>
+<-->
+<script input="number" value="1" default="1" output="y">
+setTimeout(function(){
+  send.lia( @input - @input(`x`) )
+}, 1000)
+
+send.wait()
+</script>
+```
+
+
+The `default` parameter is used to define the default output of this script. Without it, the initial calculation would result in an error due to the circular dependency, as the scripts require the outputs of each other, which cannot be calculated initially.
+
+
+<script input="range" value="1" default="1" output="x">
+setTimeout(function(){
+  send.lia( @input * @input(`y`) )
+}, 1000)
+
+send.wait()
+</script>
+<-->
+<script input="number" value="1" default="1" output="y">
+setTimeout(function(){
+  send.lia( @input - @input(`x`) )
+}, 1000)
+
+send.wait()
+</script>
+
+
+To prevent errors, try to define a default output value for your scripts.
+
+
+
+#### **Simplification with Macros**
+--------------------------------------
+
+The following example does not really make sense; it is only used to illustrate some aspects of this approach. There is a recurring and parameterized calculation within the table. Instead of using multiple scripts, we only had to define one macro that performs some calculation and formatting. The two other scripts are simple input parameters that have a certain effect on these cells.
+
+
+```markdown
+
+#### Simplification with Macros
+<!--
+sin: <script format="number"
+             localeStyle="currency"
+             currency="EUR"
+             locale="de-DE"
+             modify="false"
+    > Math.sin(@input(`param1`) + @0) + @input(`param2`) </script>
+-->
+
+<script run-once default="0"  output="param1"
+input="range" value="2" min="0" max="25" step="0.1" >
+@input
+</script>
+
+<script run-once default="0" output="param2"
+input="range" value="2" min="0" max="25" step="0.1">
+@input
+</script>
+
+<!-- data-type="barchart" -->
+| Header 1 | <script>@input(`param`)</script> |
+|:-------- | -------------------------------: |
+| 1        |                         @sin(1)  |
+| 2        |                         @sin(2)  |
+| ...      |                            ....  |
+```
+
+Combining scripts with macros reduces a lot of boilerplate and allows for handling complexity more efficiently. Additionally, these scripts work seamlessly with all other LiaScript elements previously presented, such that updates even affect the diagram representation of the table. Sorting of columns also works seamlessly.
+
+
+Parameters:
+<script run-once
+        default="0"
+        output="param1"
+        input="range" value="2" min="0" max="25" step="0.1"
+        >
+@input
+</script>
+/
+<script run-once
+        default="0"
+        output="param2"
+        input="range" value="1" min="0" max="2" step="0.1"
+        >
+@input
+</script>
+
+<!-- data-type="barchart" -->
+
+| Header  | Some Calculation (param1) |
+|:--------|--------------------------:|
+| 1       | @sin(1 * param1)          |
+| 2       | @sin(2 * param1)          |
+| 3       | @sin(3 * param1)          |
+| 4       | @sin(4 * param1)          |
+| 5       | @sin(5 * param1)          |
+| 6       | @sin(6 * param1)          |
+| 7       | @sin(7 * param1)          |
+| 8       | @sin(8 * param1)          |
+| 9       | @sin(9 * param1)          |
+
+
+And of course, we can also directly create and manipulate diagrams with different parameters a:
+<script input="range" value="2" output="range">@input</script>
+, directly from the document b:
+<script input="range" value="50" output="amplitude">@input</script>.
+You can double-click on the highlighted elements to inspect and edit its JavaScript code.
+
+
+<script run-once style="display: inline-block; width: 100%">
+function func(x) {
+    x /= 10;
+    return Math.sin(x) * Math.cos(x * @input(`range`) + 1) * Math.sin(x * 3 + 2) * @input(`amplitude`);
+}
+
+function generateData() {
+    let data = [];
+    for (let i = -200; i <= 200; i += 0.1) {
+        data.push([i, func(i)]);
+    }
+    return data;
+}
+
+let option = {
+    animation: false,
+    grid: {
+        top: 40,
+        left: 50,
+        right: 40,
+        bottom: 50
+    },
+    xAxis: {
+        name: 'x',
+        minorTick: {
+            show: true
+        },
+        splitLine: {
+            lineStyle: {
+                color: '#999'
+            }
+        },
+        minorSplitLine: {
+            show: true,
+            lineStyle: {
+                color: '#ddd'
+            }
+        }
+    },
+    yAxis: {
+        name: 'y',
+        min: -100,
+        max: 100,
+        minorTick: {
+            show: true
+        },
+        splitLine: {
+            lineStyle: {
+                color: '#999'
+            }
+        },
+        minorSplitLine: {
+            show: true,
+            lineStyle: {
+                color: '#ddd'
+            }
+        }
+    },
+    dataZoom: [{
+        show: true,
+        type: 'inside',
+        filterMode: 'none',
+        xAxisIndex: [0],
+        startValue: -20,
+        endValue: 20
+    }, {
+        show: true,
+        type: 'inside',
+        filterMode: 'none',
+        yAxisIndex: [0],
+        startValue: -20,
+        endValue: 20
+    }],
+    series: [
+        {
+            type: 'line',
+            showSymbol: false,
+            clip: true,
+            data: generateData()
+        }
+    ]
+}
+
+"HTML: <lia-chart option='" + JSON.stringify(option) + "'></lia-chart>"
+</script>
+
+
+
+## **Further settings**
+------------------------
+
+**`value`**
+
+Set the default input value, if it is a number or a string or something else, depends on the usage of the `@input` macro within the script.
+
+**`update-on-change`**
+
+As mentioned earlier, every input-field has a specific update handling, `range`, `number`, `text`, `radio`, `checkbox`, trigger the execution of the script on every change, while the others are triggered only after the user hits enter or if the input field loses the focus. However, by using the parameter `update-on-change` you can change this behavior. It can be switched off or on by passing true or false, if you only pass `update-on-change` true is used as the default:
+
+* `update-on-change`
+
+* `update-on-change="true"`
+
+* `update-on-change="false"`
+
+
+**`input-active`**
+
+Using this parameter, it is possible to switch on the input-field for ever, it will not be closed if the focus is lost.
+
+**`run-once`**
+
+A script will be executed multiple times, if the site is rendered, or if it is associated to a certain effect number. If the calculation should be executed only once use this parameter. The result is preserved and displayed on every appearance.
+
+**`modify`**
+
+By double-clicking onto a script, you get into edit-mode. The code is displayed to the user and can be edited and it is executed again if the code-input field loses the context. By setting `modify="false"` to false, this editing function is switched of furthermore there is **no gray background** displayed.
+
+```markdown
+This is a script: <script modify="false">12</script>
+```
+
+This is a script: <script modify="false">12</script>
+
+
+## **Internationalization API**
+----------------------------------
+
+By using the `format` parameter you can set a specific kind of visual formatting. This will be visible to the user, but if you connect different script with input/output then the original result of an execution will be passed to the subsequent scripts. The links below show contain all information to the associated formatting all params are directly passed to the formatting function.
+
+Use `locale` to change the type of language/localization. If you do not pass such a value, then the default document language setting is used as default.
+
+
+> There is one difference by using the `style` parameter. `style` is used format
+> the output with inline CSS. But some formattings also contain a `style`
+> parameter. In order to don't mess up with styles you have to use `localeStyle`
+> to set the locale language formatting style ;)
+
+* `format="datetime"`:
+
+  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/DateTimeFormat
+
+* `format="number"`:
+
+  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/NumberFormat/NumberFormat
+
+* `format="list"`
+
+  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/ListFormat/ListFormat
+
+* `format="relativetime"`:
+
+  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/RelativeTimeFormat/RelativeTimeFormat
+
+* `format="pluralrules"`:
+
+  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/PluralRules/PluralRules
+
+  
+## **LIA - global object**
+----------------------------
+
+Todo
+
+### **Publish subscribe API**
+----------------------------------
+
+Since LiaScript allows for opening Classrooms with a chat that supports LiaScript syntax and synchronizes the states of quizzes and surveys between users, along with support for collaborative editing, we have decided to add a new experimental API.
+
+!?[LiaScript Classroom](https://www.youtube.com/watch?v=Kjk6OblugXI)
+
+
+This API allows anyone to create new collaborative LiaScript extensions by combining scripts with anything that might be interesting, such as collaborative painting, marking positions on a map, and more.
+
+```js
+
+// true if connection to a classroom has been established
+LIA.classroom.connected
+
+// creates a callback on a connection
+LIA.classroom.on("connected", () => {
+    console.log("connected")
+})
+
+// callback for the disconnection
+LIA.classroom.on("disconnected", () => {
+    console.log("disconnected")
+})
+
+// publish some data on a topic
+LIA.classroom.publish("topic", { data: "Hello World" })
+
+// subscribe to all messages of a topic
+const subID = LIA.classroom.subscribe("topic", (message) => {
+    console.log("received", message)
+})
+
+// do not receive messages anymore
+LIA.classroom.unsubscribe(subID)
+```
+
+The following code creates an entire waving app, where students can send little raining icons to vote, for example, for a topic. This functionality can be easily put into a template that can be imported into different courses.
+
+```markdown
+<!--
+@style
+.fall {
+  position: absolute;
+  top: 0;
+  animation: fall 4s linear;
+}
+@keyframes fall {
+  0% { top: 0; }
+  100% { top: 100%; }
+}
+@end
+
+@wave
+<script input="button" run-once="true" modify="false">
+if (LIA.classroom.connected){
+    LIA.classroom.publish("wave", "@0")
+}
+"@0"
+</script>
+@end
+-->
+
+# Waving App
+
+Share your feelings:
+
+<script run-once="true">
+LIA.classroom.subscribe("wave", (msg) => {
+    const icon = document.createElement("span")
+    icon.innerHTML = msg
+    icon.classList.add("fall")
+    icon.style.left=(Math.random() * 100) + "%"
+    icon.style.zIndex = 10000
+    document.body.appendChild(icon)
+    icon.addEventListener('animationend', function() {
+        icon.remove();
+    });
+})
+console.log("subscription")
+</script>
+
+<script input="button" run-once="true" modify="false">
+if (LIA.classroom.connected){
+    LIA.classroom.publish("wave", "👋")
+}
+
+"👋"
+</script>
+@wave(❤️) @wave(👎) @wave(👍) @wave(💀) @wave(❓)
+```
+
+Try it out by opening a classroom on multiple browsers!
+
+[Try it out](https://liascript.github.io/course/?data:text/plain;charset=utf-8;Content-Encoding=gzip;base64,H4sIAAAAAAAAA8VSQW7UMBTd+xQfo6oJdEKQWM1MRlOhSlRqVyCxdpKfGQvHtmxnYKhGYo8oAtYVGw7BeXoBOALfiZqZ9gKs/P39nt/z858/mkzY0oetQpY1Qim4YgDWeBmk0VMQpTeqCzijbjB2CnmshJatGAA954UHJTUKN2M7tnyH28aJFj2MF+ZHcHXHhx01nuf7Vqxjl6ioa8aW78UG2dxXTtoAUtsuFLzsQjCag+v0xOgKCx5chxxaU8tmW3CS8sgXTDaQXJyfZpUS3jtj2qwyWmMVsE6jE4D7p7YrlfTrhEdRfgJ8mfOUrMSVzZ8NJhaDs8lkwdhjeCs2Uq/g1FrGXq+FQ9iazkGDSCGs/JSN3h+YXbD72r4rI7DEUT1p/SqFYgGDVbLuKQFaoIDaVF2LOmSVQxHwTGHcJdxboclyxEdkJum57tWbywvi0HX7g174QvqQibpOYmLqkNcPQaawCUVyKcI6c0LXpk1SeBK/KIWnwI/4Q/zHc13jB5IiSJ73p6PR0tTbTFhL2b1cS1UnkXegSDbONgSMnpBMJ8fjYBHl+ASaTldxRx6GQEaqw9ZsMElnfXtH6y5lMS4T32BWFMsQro18eub+K//bZP39+e1zP1tsKA/HK2KS25tff35/TWHYEeb6oP6yr79/uqtvb36k/wAY2UbHwwMAAA==#1)
+
+
+Here is the base code that you can try out and modify. Afterwards, share your course via the DAT-URI options, which allows to encode short courses within the URL.
+
+[Live Editor Example](https://liascript.github.io/LiveEditor/?/show/code/H4sIAAAAAAAAA8VSQW7UMBTd+xQfo6oJdEKQWM1MRlOhSlRqVyCxdpKfGQvHtmxnYKhGYo8oAtYVGw7BeXoBOALfiZqZ9gKs/P39nt/z858/mkzY0oetQpY1Qim4YgDWeBmk0VMQpTeqCzijbjB2CnmshJatGAA954UHJTUKN2M7tnyH28aJFj2MF+ZHcHXHhx01nuf7Vqxjl6ioa8aW78UG2dxXTtoAUtsuFLzsQjCag+v0xOgKCx5chxxaU8tmW3CS8sgXTDaQXJyfZpUS3jtj2qwyWmMVsE6jE4D7p7YrlfTrhEdRfgJ8mfOUrMSVzZ8NJhaDs8lkwdhjeCs2Uq/g1FrGXq+FQ9iazkGDSCGs/JSN3h+YXbD72r4rI7DEUT1p/SqFYgGDVbLuKQFaoIDaVF2LOmSVQxHwTGHcJdxboclyxEdkJum57tWbywvi0HX7g174QvqQibpOYmLqkNcPQaawCUVyKcI6c0LXpk1SeBK/KIWnwI/4Q/zHc13jB5IiSJ73p6PR0tTbTFhL2b1cS1UnkXegSDbONgSMnpBMJ8fjYBHl+ASaTldxRx6GQEaqw9ZsMElnfXtH6y5lMS4T32BWFMsQro18eub+K//bZP39+e1zP1tsKA/HK2KS25tff35/TWHYEeb6oP6yr79/uqtvb36k/wAY2UbHwwMAAA==)
